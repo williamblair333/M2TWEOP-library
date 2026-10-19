@@ -130,19 +130,19 @@ namespace campaignAi
 					enemyStr += army->settlement ? army->totalStrength / 8 : army->totalStrength / 4;
 			}
 		}
-		int balance = static_cast<int>(enemyStr * 1.5 - ownStr * strModifier);
+		int balance = static_cast<int>(enemyStr * 1.2 - ownStr * strModifier);
 		if (const int po = settlement->stats.settlementStats.PublicOrder; po < 80)
 			balance += 1000 - po * 10;
 		if (balance < -100)
 		{
 			if (!settlement->army || (settlement->army && settlement->army->numOfUnits == 0))
 				return 10000;
-			return 0;
+			return 300;
 		}
 		balance += clamp(settlement->stats.settlementStats.TotalIncomeWithoutAdmin / 10, 0, 10000);
 		balance += clamp(gsdData->regionValue / 5, 0, 10000);
 		const int modified = static_cast<int>(static_cast<float>(balance) * globalEopAiConfig::getInstance()->getFactionData(faction)->getSettlementFactor(settlement)); // NOLINT(readability-static-accessed-through-instance) 
-		return clamp(modified, 0, 100000);
+		return clamp(modified, 300, 100000);
 	}
 	
 
@@ -299,7 +299,33 @@ bool armyResource::validate()
 {
 	if (used || !own || !army || army->inBattle || !army->gen || !army->gen->characterRecord || army->gen->markedForDeath)
 		return false;
+	if (globalEopAiConfig::getInstance()->getPendingUnits(army->gen->xCoord, army->gen->yCoord) > 0)
+		return false;
 	return true;
+}
+
+int globalEopAiConfig::getPendingUnits(const int x, const int y) const
+{
+	const auto it = m_PendingTileUnits.find({ x, y });
+	return it == m_PendingTileUnits.end() ? 0 : it->second;
+}
+
+void globalEopAiConfig::addPendingUnits(const int x, const int y, const int units)
+{
+	m_PendingTileUnits[{ x, y }] += units;
+}
+
+int aiOrder::findTileWithRoom(const int unitNum) const
+{
+	const auto config = globalEopAiConfig::getInstance();
+	for (int i = 0; i < static_cast<int>(validTiles.size()); i++)
+	{
+		if (config->getPendingUnits(validTiles[i].first, validTiles[i].second) > 0)
+			continue;
+		if (tileNums[i] + unitNum <= 20)
+			return i;
+	}
+	return -1;
 }
 
 void armyResource::calculatePositionPower()
@@ -899,10 +925,11 @@ bool attackSettlementOrder::execute()
 						&& siege->army->canReceiveMerge(assignedArmy->resource->army))
 					{
 						assignedArmy->resource->army->gen->hasEopOrders = true;
+						const int joiningUnits = assignedArmy->resource->army->numOfUnits;
 						if (const auto [xCoord, yCoord] = siege->army->getCoords(); assignedArmy->resource->army->moveTactical(xCoord, yCoord, true))
 						{
 							if (const auto& armyRes = globalEopAiConfig::getInstance()->findArmyResource(siege->army))
-								armyRes->unitCount += assignedArmy->resource->army->numOfUnits;
+								armyRes->unitCount += joiningUnits;
 						}
 						assignedArmy->resource->used = true;
 						TURN_HAD_ACTION = true;
@@ -978,21 +1005,15 @@ bool attackSettlementOrder::execute()
 				assignedArmy->resource->targets--;
 				continue;
 			}
-			int tileIndex = 0;
+			if (!assignedArmy->resource->validate())
+				continue;
 			const int unitNum = assignedArmy->resource->army->numOfUnits;
-			while(true)
-			{
-				if (tileIndex >= static_cast<int>(validTiles.size()))
-					break;
-				if (tileNums[tileIndex] + unitNum <= 20)
-					break;
-				tileIndex++;
-			}
-			if (!assignedArmy->resource->validate() || tileIndex >= static_cast<int>(validTiles.size()))
+			const int tileIndex = findTileWithRoom(unitNum);
+			if (tileIndex < 0)
 				continue;
 			assignedArmy->resource->used = true;
 			TURN_HAD_ACTION = true;
-			tileNums[tileIndex] += assignedArmy->resource->army->numOfUnits;
+			globalEopAiConfig::getInstance()->addPendingUnits(validTiles[tileIndex].first, validTiles[tileIndex].second, unitNum);
 			totalCommitted += assignedArmy->resource->army->totalStrength;
 			if (assignedArmy->moveCost > assignedArmy->resource->army->gen->movePointsArmy)
 			{
@@ -1238,17 +1259,11 @@ bool attackArmyOrder::execute()
 				assignedArmy->resource->targets--;
 				continue;
 			}
-			int tileIndex = 0;
+			if (!assignedArmy->resource->validate())
+				continue;
 			const int unitNum = assignedArmy->resource->army->numOfUnits;
-			while(true)
-			{
-				if (tileIndex >= static_cast<int>(validTiles.size()))
-					break;
-				if (tileNums[tileIndex] + unitNum <= 20)
-					break;
-				tileIndex++;
-			}
-			if (!assignedArmy->resource->validate() || tileIndex >= static_cast<int>(validTiles.size()))
+			const int tileIndex = findTileWithRoom(unitNum);
+			if (tileIndex < 0)
 				continue;
 			assignedArmy->resource->army->gen->hasEopOrders = true;
 			assignedArmy->resource->used = true;
@@ -1258,7 +1273,7 @@ bool attackArmyOrder::execute()
 				gameHelpers::logStringGame(logString2);
 			}
 			TURN_HAD_ACTION = true;
-			tileNums[tileIndex] += assignedArmy->resource->army->numOfUnits;
+			globalEopAiConfig::getInstance()->addPendingUnits(validTiles[tileIndex].first, validTiles[tileIndex].second, unitNum);
 			totalCommitted += assignedArmy->resource->army->totalStrength;
 			if (assignedArmy->moveCost > assignedArmy->resource->army->gen->movePointsArmy)
 			{
@@ -1563,8 +1578,78 @@ void globalEopAiConfig::checkRegion(int regionId)
 	}
 }
 
+void globalEopAiConfig::fixOverfullArmy(armyStruct* army)
+{
+	for (int attempt = 0; attempt < 3 && army->numOfUnits > 20; attempt++)
+	{
+		const auto gen = army->gen;
+		if (!gen || !gen->characterRecord)
+			return;
+		gameHelpers::logStringGame("Character: " + std::string(gen->characterRecord->fullName ? gen->characterRecord->fullName : "") + " has more than 20 units!");
+		const auto [newX, newY] = stratMapHelpers::findValidTileNearTile(army->getX() + 1, army->getY() + 1, 7);
+		sol::table unitTable = plugData::data.luaAll.luaState.create_table();
+		const int surplus = min(army->numOfUnits - 20, 20);
+		for (int i = 0; i < surplus; i++)
+			unitTable.add(army->getUnit(army->numOfUnits - 1 - i));
+		if (!factionHelpers::splitArmy(army->faction, unitTable, newX, newY))
+			return;
+	}
+}
+
+void globalEopAiConfig::fixOverfullArmies(factionStruct* fac)
+{
+	std::vector<armyStruct*> overfull;
+	for (int i = 0; i < fac->stackNum; i++)
+	{
+		if (const auto army = fac->armies[i]; army && army->gen && !army->settlement && !army->isAdmiral && army->numOfUnits > 20)
+			overfull.push_back(army);
+	}
+	for (const auto army : overfull)
+		fixOverfullArmy(army);
+}
+
+std::vector<character*> globalEopAiConfig::getAuxGenerals(const armyStruct* army)
+{
+	std::vector<character*> auxGenerals{};
+	for (int c = 0; c < army->charactersNum; ++c)
+	{
+		const auto aux = army->characters[c];
+		if (aux && aux->getTypeID() == characterTypeStrat::namedCharacter && aux->bodyguards && aux->bodyguards->army == army)
+			auxGenerals.push_back(aux);
+	}
+	return auxGenerals;
+}
+
+bool globalEopAiConfig::transferAuxGeneral(armyStruct* army, armyStruct* target, std::vector<character*>& auxGenerals)
+{
+	if (auxGenerals.empty() || !army || !target || target == army || !target->gen || target->isAdmiral || target->numOfUnits >= 20
+		|| target->faction->factionID != m_Faction->factionID || target->gen->markedForDeath
+		|| target->gen->getTypeID() != characterTypeStrat::general)
+		return false;
+	const auto [xCoord, yCoord] = target->getCoords();
+	if (xCoord == -1
+		|| std::find(m_usedArmies.begin(), m_usedArmies.end(), target) != m_usedArmies.end()
+		|| getPendingUnits(xCoord, yCoord) > 0)
+		return false;
+	const auto gen = auxGenerals.back();
+	if (!army->transferCharacterToArmy(gen, target))
+	{
+		if (!gen->bodyguards || gen->bodyguards->army != army)
+			auxGenerals.pop_back();
+		return false;
+	}
+	auxGenerals.pop_back();
+	if (gen->characterRecord && gen->characterRecord->fullName)
+		gameHelpers::logStringGame("Character: " + string(gen->characterRecord->fullName) + " leading another army!");
+	m_usedCharacters.push_back(gen);
+	m_usedArmies.push_back(target);
+	return true;
+}
+
 void globalEopAiConfig::characterTurnStart(character* currentChar, bool turnStart)
 {
+	if (!enabled || !currentChar || !currentChar->characterRecord)
+		return;
 	m_Faction = currentChar->characterRecord->faction;
 	for (const auto &ch : m_usedCharacters)
 	{
@@ -1572,23 +1657,15 @@ void globalEopAiConfig::characterTurnStart(character* currentChar, bool turnStar
 			return;
 	}
 	if (!m_Faction || m_Faction->factionRecord->slave || m_Faction->isHorde || !currentChar->army || !currentChar->isGeneral() || currentChar->markedForDeath)
-		return; 
-	const auto army = currentChar->army;
-	if (army->numOfUnits > 20)
-	{
-		gameHelpers::logStringGame("Character: " + string(currentChar->characterRecord->fullName) + " has more than 20 units!");
-		// MessageBoxA(nullptr, "Army has more than 20 units!", "Error", MB_OK);
-		const auto [newX, newY] = stratMapHelpers::findValidTileNearTile(army->getX() + 1, army->getY() + 1, 7);
-		sol::table unitTable = plugData::data.luaAll.luaState.create_table();
-		for (int i = army->numOfUnits - 1; i > 19; i--)
-		{
-			const auto unit = army->getUnit(i);
-			unitTable.add(unit);
-		}
-		factionHelpers::splitArmy(currentChar->characterRecord->faction, unitTable, newX, newY);
-	}
-	if (army->siege)
 		return;
+	const auto army = currentChar->army;
+	fixOverfullArmy(army);
+	if (army->siege || currentChar->hasEopOrders)
+		return;
+	const auto [armyX, armyY] = army->getCoords();
+	if (std::find(m_usedArmies.begin(), m_usedArmies.end(), army) != m_usedArmies.end() || getPendingUnits(armyX, armyY) > 0)
+		return;
+	const std::string charName = currentChar->characterRecord->fullName ? currentChar->characterRecord->fullName : "";
 	bool used = false;
 	const auto moveData = currentChar->createMoveData(static_cast<int>(searchType::avoidZoc), 1);
 	extentsGuard guard;
@@ -1604,11 +1681,11 @@ void globalEopAiConfig::characterTurnStart(character* currentChar, bool turnStar
 				if (!nearSett.settlement->army)
 					armyHelpers::createArmyInSettlement(nearSett.settlement);
 				if (army->moveTactical(nearSett.settlement->xCoord, nearSett.settlement->yCoord, true))
-					gameHelpers::logStringGame("Character: " + string(currentChar->characterRecord->fullName) + " Garrisoned empty settlement!");
+					gameHelpers::logStringGame("Character: " + charName + " Garrisoned empty settlement!");
 				used = true;
 				break;
 			}
-			
+
 			if (!movedDamaged && nearSett.settlement->army && nearSett.settlement->siegeNum == 0 && nearSett.moveCost < 150.f)
 			{
 				std::vector<unit*> damagedUnits;
@@ -1620,7 +1697,9 @@ void globalEopAiConfig::characterTurnStart(character* currentChar, bool turnStar
 					if (unit->soldierCount < max(1, unit->SoldierCountMaxStrat * 0.33))
 						damagedUnits.push_back(unit);
 				}
-				if (!damagedUnits.empty() && nearSett.settlement->army->numOfUnits + damagedUnits.size() <= 20)
+				const int garrisonX = nearSett.settlement->xCoord;
+				const int garrisonY = nearSett.settlement->yCoord;
+				if (!damagedUnits.empty() && nearSett.settlement->army->numOfUnits + getPendingUnits(garrisonX, garrisonY) + static_cast<int>(damagedUnits.size()) <= 20)
 				{
 					movedDamaged = true;
 					sol::table damagedUnitsTable =  sol::state_view(plugData::data.luaAll.luaState).create_table();
@@ -1628,8 +1707,8 @@ void globalEopAiConfig::characterTurnStart(character* currentChar, bool turnStar
 					{
 						damagedUnitsTable.add(unit);
 					}
-					factionHelpers::splitArmy(currentChar->characterRecord->faction, damagedUnitsTable, 
-						nearSett.settlement->xCoord, nearSett.settlement->yCoord);
+					if (factionHelpers::splitArmy(currentChar->characterRecord->faction, damagedUnitsTable, garrisonX, garrisonY))
+						addPendingUnits(garrisonX, garrisonY, static_cast<int>(damagedUnits.size()));
 					used = true;
 					break;
 				}
@@ -1638,68 +1717,45 @@ void globalEopAiConfig::characterTurnStart(character* currentChar, bool turnStar
 	}
 	if (used)
 		return;
-	std::vector<character*> auxGenerals{};
-	if (army->charactersNum > 0)
+	auto auxGenerals = getAuxGenerals(army);
+	for (const auto& nearArmy : moveData->armies)
 	{
-		for (int c = 0; c < army->charactersNum; ++c)
-		{
-			const auto aux = army->getCharacter(c);
-			if (aux->getTypeID() == characterTypeStrat::namedCharacter)
-			{
-				auxGenerals.push_back(aux);
-			}
-		}
+		if (auxGenerals.empty())
+			break;
+		if (nearArmy.turns <= 1 && transferAuxGeneral(army, nearArmy.army, auxGenerals))
+			return;
 	}
 	for (const auto& nearArmy : moveData->armies)
 	{
-		bool alreadyUsed = false;
-		for (const auto& usedArmy : m_usedArmies)
-		{
-			if (usedArmy == nearArmy.army)
-			{
-				alreadyUsed = true;
-				break;
-			}
-		}
-		if (!nearArmy.army->gen
+		if (!nearArmy.army
+			|| nearArmy.army == army
+			|| !nearArmy.army->gen
 			|| nearArmy.army->isAdmiral
+			|| nearArmy.turns > 1
 			|| nearArmy.army->faction->factionID != m_Faction->factionID
 			|| nearArmy.army->gen->markedForDeath
-			|| nearArmy.army->numOfUnits == 20
-			|| alreadyUsed)
+			|| nearArmy.army->numOfUnits == 20)
 		{
 			continue;
 		}
-		if (!auxGenerals.empty())
-		{
-			if (!alreadyUsed)
-			{
-				const auto gen = auxGenerals.back();
-				if (nearArmy.army->gen->getTypeID() == characterTypeStrat::general
-					&& nearArmy.army->canReceiveUnit(gen->bodyguards))
-				{
-					army->splitUnit(gen->bodyguards, nearArmy.army->getX(), nearArmy.army->getY());
-					if (gen->characterRecord && gen->characterRecord->fullName)
-						gameHelpers::logStringGame("Character: " + string(gen->characterRecord->fullName) + " leading another army!");
-					m_usedCharacters.push_back(gen);
-					m_usedArmies.push_back(nearArmy.army);
-					auxGenerals.pop_back();
-					break;
-				}
-			}
-		}
+		const auto [xCoord, yCoord] = nearArmy.army->getCoords();
+		if (xCoord == -1)
+			continue;
+		if (std::find(m_usedArmies.begin(), m_usedArmies.end(), nearArmy.army) != m_usedArmies.end() || getPendingUnits(xCoord, yCoord) > 0)
+			continue;
 		if (turnStart && nearArmy.moveCost > 75.f)
 			continue;
 		if (army->numOfUnits <= nearArmy.army->numOfUnits && nearArmy.army->canReceiveMerge(army))
 		{
-			const auto [xCoord, yCoord] = nearArmy.army->getCoords();
-			if (xCoord == -1)
-				continue;
+			const int movingUnits = army->numOfUnits;
 			if (army->moveTactical(xCoord, yCoord, false))
 			{
+				m_usedCharacters.push_back(currentChar);
 				m_usedCharacters.push_back(nearArmy.army->gen);
-				if (currentChar->characterRecord && currentChar->characterRecord->fullName)
-					gameHelpers::logStringGame("Character: " + string(currentChar->characterRecord->fullName) + " merged armies! + movecost: " + std::to_string(nearArmy.moveCost));
+				m_usedArmies.push_back(army);
+				m_usedArmies.push_back(nearArmy.army);
+				addPendingUnits(xCoord, yCoord, movingUnits);
+				gameHelpers::logStringGame("Character: " + charName + " merged armies! + movecost: " + std::to_string(nearArmy.moveCost));
 				break;
 			}
 		}
@@ -2126,6 +2182,11 @@ void globalEopAiConfig::assignOrders(factionStruct* fac)
 		if (enableLogging)
 			gameHelpers::logStringGame(order->toString());
 	}
+	for (const auto& armyRes : m_Armies)
+	{
+		if (armyRes->used && armyRes->army)
+			m_usedArmies.push_back(armyRes->army);
+	}
 	m_Armies.erase(std::remove_if(m_Armies.begin(), m_Armies.end(), [](const std::shared_ptr<armyResource>& army)
 	{
 		return army->used || army->army->siege;
@@ -2339,11 +2400,9 @@ void globalEopAiConfig::turnStartMove(factionStruct* fac, const bool isEnd)
 {
 	if (!enabled || fac->isPlayerControlled > 0 || fac->factionRecord->slave || fac->isHorde)
 		return;
-	if (!isEnd)
-	{
-		m_usedCharacters.clear();
-		m_usedArmies.clear();
-	}
+	m_usedCharacters.clear();
+	m_usedArmies.clear();
+	m_PendingTileUnits.clear();
 	const auto campaignData = campaignHelpers::getCampaignData();
 	campaignData->speedUp = true;
 	m_Faction = fac;
@@ -2351,6 +2410,8 @@ void globalEopAiConfig::turnStartMove(factionStruct* fac, const bool isEnd)
 	TURN_HAD_ACTION = false;
 	PLAYER_ASSAULTED = false;
 	isEndTurn = isEnd;
+	if (!isEnd)
+		fixOverfullArmies(fac);
 	getData(fac);
 	assignOrders(fac);
 	campaignData->speedUp = true;
@@ -2374,6 +2435,20 @@ void globalEopAiConfig::turnStartMove(factionStruct* fac, const bool isEnd)
 			return a->moveCost < b->moveCost;
 		};
 		std::stable_sort(armyRes->nearResources.begin(), armyRes->nearResources.end(), distanceSort);
+		auto auxGenerals = getAuxGenerals(armyRes->army);
+		for (const auto& nearRes : armyRes->nearResources)
+		{
+			if (auxGenerals.empty())
+				break;
+			if (nearRes->resource->used || nearRes->resource->unitCount >= 20 || nearRes->turns > 1)
+				continue;
+			if (transferAuxGeneral(armyRes->army, nearRes->resource->army, auxGenerals))
+			{
+				nearRes->resource->unitCount++;
+				armyRes->unitCount--;
+				nearRes->resource->used = true;
+			}
+		}
 		for (const auto& nearRes : armyRes->nearResources)
 		{
 			if (nearRes->resource->used || nearRes->resource->army->isAdmiral || nearRes->resource->army->faction->factionID != m_Faction->factionID || nearRes->resource->unitCount >= 20)
@@ -2383,13 +2458,21 @@ void globalEopAiConfig::turnStartMove(factionStruct* fac, const bool isEnd)
 				const auto [xCoord, yCoord] = nearRes->resource->army->getCoords();
 				if (xCoord == -1)
 					continue;
+				if (getPendingUnits(xCoord, yCoord) > 0)
+					continue;
 				string charName;
 				if (armyRes->army->gen->characterRecord->shortName)
 					charName = armyRes->army->gen->characterRecord->shortName;
+				const int movingUnits = armyRes->army->numOfUnits;
 				if (armyRes->army->moveTactical(xCoord, yCoord, false))
+				{
 					gameHelpers::logStringGame("Character: " + charName + " merged armies!");
+					addPendingUnits(xCoord, yCoord, movingUnits);
+				}
 				armyRes->used = true;
 				nearRes->resource->used = true;
+				m_usedArmies.push_back(armyRes->army);
+				m_usedArmies.push_back(nearRes->resource->army);
 				break;
 			}
 		}
@@ -2403,10 +2486,17 @@ void globalEopAiConfig::turnStartMove(factionStruct* fac, const bool isEnd)
 				if (armyRes->army->gen->characterRecord->shortName)
 					charName = armyRes->army->gen->characterRecord->shortName;
 				const auto targetSett = armyRes->nearSetts.front()->resource->settlement;
-				if (targetSett->army->canReceiveMerge(armyRes->army))
+				if (targetSett->army && targetSett->army->canReceiveMerge(armyRes->army)
+					&& targetSett->army->numOfUnits + getPendingUnits(targetSett->xCoord, targetSett->yCoord) + armyRes->army->numOfUnits <= 20)
 				{
+					const int movingUnits = armyRes->army->numOfUnits;
 					if (armyRes->army->moveTactical(targetSett->xCoord, targetSett->yCoord, false))
+					{
 						gameHelpers::logStringGame("Character: " + charName + " moved to safety!");
+						addPendingUnits(targetSett->xCoord, targetSett->yCoord, movingUnits);
+						armyRes->used = true;
+						m_usedArmies.push_back(armyRes->army);
+					}
 				}
 			}
 		}
@@ -3962,7 +4052,7 @@ settlementTroopPolicy aiPersonalityValues::decideSettlementTroopPolicy(const set
 	const float cavalryPref = ((getRecruitmentValueEnum(unitCategoryClass::heavyCavalry) + getRecruitmentValueEnum(unitCategoryClass::lightCavalry) + getRecruitmentValueEnum(unitCategoryClass::missileCavalry)) / 3.f) * (safeRegion ? 2.f : 1.f);
 	const float missilePref = getRecruitmentValueEnum(unitCategoryClass::missileInfantry) * (isUnderRisk ? 2.f : 1.f);
 	const float spearmenPref = getRecruitmentValueEnum(unitCategoryClass::spearmenInfantry) * (isUnderRisk ? 2.f : 1.f);
-	const float artilleryPref = getRecruitmentValueEnum(unitCategoryClass::siegeWeapon) * (safeRegion ? 1.f : 0.5f);
+	const float artilleryPref = getRecruitmentValueEnum(unitCategoryClass::siegeWeapon) * (safeRegion ? 1.5f : 0.5f);
 	const auto base = (infantryPref + cavalryPref + missilePref + spearmenPref + artilleryPref);
 	priorities[static_cast<int>(settlementTroopPolicy::infantry)] = (infantryPref / base - garrisonInfantryRatio);
 	priorities[static_cast<int>(settlementTroopPolicy::cavalry)] = (cavalryPref / base - garrisonCavalryRatio);

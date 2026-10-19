@@ -2937,15 +2937,31 @@ void __fastcall patchesForGame::onEvent(DWORD** vTab, DWORD arg2)
 		//	fac->aiFaction->aiGlobalStrategyDirector->militaryDirector.logData();
 		//globalEopAiConfig::getInstance()->turnStartMove(fac, true);
 		
-		if (fac->isPlayerControlled == 0)
+		if (fac->isPlayerControlled == 0 && globalEopAiConfig::getEnabled())
 		{
+			std::vector<character*> candidates;
 			for (int i = fac->numOfCharacters - 1; i >= 0; i--)
 			{
-				if (const auto character = fac->characters[i]; 
+				if (const auto character = fac->characters[i];
 					character && character->isGeneral() && character->army && !character->getSettlement())
 				{
-					globalEopAiConfig::getInstance()->characterTurnStart(character, true);
+					candidates.push_back(character);
 				}
+			}
+			for (const auto character : candidates)
+			{
+				bool stillPresent = false;
+				for (int i = 0; i < fac->numOfCharacters; i++)
+				{
+					if (fac->characters[i] == character)
+					{
+						stillPresent = true;
+						break;
+					}
+				}
+				if (!stillPresent || character->markedForDeath || !character->army)
+					continue;
+				globalEopAiConfig::getInstance()->characterTurnStart(character, true);
 			}
 		}
 		

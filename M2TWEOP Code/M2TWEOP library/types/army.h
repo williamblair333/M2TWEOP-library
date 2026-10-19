@@ -245,6 +245,8 @@ public:
 	unit* createEopUnit(int eduIndex, int exp, int arm, int weapon);
 	armyStruct* mergeArmies(armyStruct* targetArmy, bool force = true);
 	armyStruct* mergeArmies(armyStruct* targetArmy);
+	void removeCharacter(character* general, bool fade);
+	bool transferCharacterToArmy(character* general, armyStruct* otherArmy);
 };
 
 namespace armyHelpers
@@ -254,7 +256,7 @@ namespace armyHelpers
 	void buildWatchTower(armyStruct* army);
 	bool stopSiege(armyStruct* army);
 	bool stopBlockPort(armyStruct* army);
-	void mergeArmies(armyStruct* army, armyStruct* targetArmy);
+	bool mergeArmies(armyStruct* army, armyStruct* targetArmy);
 
 	//Army Creation
 	armyStruct* createArmy(character* character);

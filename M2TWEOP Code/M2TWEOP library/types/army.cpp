@@ -16,6 +16,7 @@
 #include "gameHelpers.h"
 #include "strategyMap.h"
 #include "rebelFactions.h"
+#include <unordered_set>
 
 std::unordered_map<std::string, std::shared_ptr<bannerData>> eopBannerSymbols::banners = {};
 
@@ -33,97 +34,94 @@ settlementStruct* siegeS::getSiegedSettlement()
 
 armyStruct* armyStruct::moveTactical(int x, int y, bool forceMerge)
 {
+	if (numOfUnits < 1 || numOfUnits > 20)
+	{
+		gameHelpers::logStringGame("armyStruct.moveTactical: can not move an army with " + std::to_string(numOfUnits) + " units.");
+		return nullptr;
+	}
 	if (shipArmy && distance(shipArmy->gen->xCoord, shipArmy->gen->yCoord, x, y) > 1.5)
 	{
 		factionHelpers::disembark(shipArmy, x, y);
 		return this;
 	}
-	auto tile = stratMapHelpers::getTile(x, y);
-	if (forceMerge)
+	const auto tile = stratMapHelpers::getTile(x, y);
+	if (!tile)
 	{
-		if (const auto target = tile->getArmy(false); target)
-		{
-			if (!target->canReceiveMerge(this))
-			{
-				gameHelpers::logStringGame("armyStruct.moveTactical: can not merge army.");
-				return nullptr;
-			}
-			return mergeArmies(target, true);
-		}
+		gameHelpers::logStringGame("armyStruct.moveTactical: target tile is out of bounds.");
 		return nullptr;
 	}
-	const auto stratPathFind = gameHelpers::getGameDataAll()->stratPathFinding;
-	auto unitList = new unit*[numOfUnits];
-	for (int i = 0; i < numOfUnits; i++)
-		unitList[i] = units[i];
+	if (forceMerge)
+	{
+		const auto target = tile->getArmy(false);
+		if (!target || target == this)
+			return nullptr;
+		if (!target->canReceiveMerge(this))
+		{
+			gameHelpers::logStringGame("armyStruct.moveTactical: can not merge army.");
+			return nullptr;
+		}
+		return mergeArmies(target, true);
+	}
 	const auto fac = faction;
-	if (auto tileArmy = tile->getArmy(); tileArmy && !tileArmy->canReceiveMerge(this))
+	if (const auto tileArmy = tile->getArmy(); tileArmy && tileArmy != this && !tileArmy->canReceiveMerge(this))
 	{
 		const auto [newX, newY] = stratMapHelpers::findValidTileNearTile(x, y, isAdmiral ? 3 : 7);
 		//gameHelpers::logStringGame("New tile: " + std::to_string(newX) + " " + std::to_string(newY));
-		if (x== newX && y == newY)
+		if (x == newX && y == newY)
 		{
 			gameHelpers::logStringGame("armyStruct.moveTactical: can not merge army or find valid near tile.");
-			delete[] unitList;
 			return nullptr;
 		}
-		const auto army = moveTactical(newX, newY, false);
-		delete[] unitList;
-		return army;
+		return moveTactical(newX, newY, false);
 	}
-	else if (auto tileSett = tile->getSettlement(); tileSett && tileSett->faction != faction)
+	if (const auto tileSett = tile->getSettlement(); tileSett && tileSett->faction != faction)
 	{
 		const auto [newX, newY] = stratMapHelpers::findValidTileNearTile(x, y, isAdmiral ? 3 : 7);
 		//gameHelpers::logStringGame("New tile: " + std::to_string(newX) + " " + std::to_string(newY));
-		if (x== newX && y == newY)
+		if (x == newX && y == newY)
 		{
 			gameHelpers::logStringGame("armyStruct.moveTactical: can not merge army into settlement or find valid near tile.");
-			delete[] unitList;
 			return nullptr;
 		}
-		const auto army = moveTactical(newX, newY, false);
-		delete[] unitList;
-		return army;
+		return moveTactical(newX, newY, false);
 	}
-	else if (auto tileFort = tile->getFort(); tileFort && tileFort->faction != faction)
+	if (const auto tileFort = tile->getFort(); tileFort && tileFort->faction != faction)
 	{
 		const auto [newX, newY] = stratMapHelpers::findValidTileNearTile(x, y, isAdmiral ? 3 : 7);
 		//gameHelpers::logStringGame("New tile: " + std::to_string(newX) + " " + std::to_string(newY));
-		if (x== newX && y == newY)
+		if (x == newX && y == newY)
 		{
 			gameHelpers::logStringGame("armyStruct.moveTactical: can not merge army into fort or find valid near tile.");
-			delete[] unitList;
 			return nullptr;
 		}
-		const auto army = moveTactical(newX, newY, false);
-		delete[] unitList;
-		return army;
+		return moveTactical(newX, newY, false);
 	}
-	int* targetCoords = new int[2]{ x, y };
-	if (!GAME_FUNC(bool(__thiscall*)(stratPathFinding*, unit**, int, int*),
-		canArmySplit)(stratPathFind, unitList, numOfUnits, targetCoords))
+	
+	std::vector<unit*> unitList(units, units + numOfUnits);
+	coordPair targetCoords{ x, y };
+	const auto stratPathFind = gameHelpers::getGameDataAll()->stratPathFinding;
+	if (!GAME_FUNC(bool(__thiscall*)(stratPathFinding*, unit**, int, coordPair*),
+		canArmySplit)(stratPathFind, unitList.data(), static_cast<int>(unitList.size()), &targetCoords))
 	{
 		gameHelpers::logStringGame("armyStruct.moveTactical: can not move army.");
-		delete[] targetCoords;
-		delete[] unitList;
 		return nullptr;
 	}
 	DWORD splitArmy = codes::offsets.splitArmy;
-	auto listPtr = unitList;
-	int unitCount = numOfUnits;
+	auto listPtr = unitList.data();
+	auto coordsPtr = &targetCoords;
+	int unitCount = static_cast<int>(unitList.size());
 	_asm
 	{
-		push targetCoords
+		push coordsPtr
 		push unitCount
 		push listPtr
 		mov ecx, fac
 		mov eax, splitArmy
 		call eax
 	}
-	delete[] targetCoords;
-	stratMapHelpers::clearSundries(this->gen);
-	delete[] unitList;
-	return this;
+	armyStruct* resultArmy = unitList.front()->army;
+	stratMapHelpers::clearSundries(resultArmy == this ? gen : nullptr);
+	return resultArmy;
 }
 
 fortStruct* siegeS::getSiegedFort()
@@ -391,6 +389,11 @@ int armyStruct::getNumberOfCategory(unitCategory category)
 
 void armyStruct::splitUnit(unit* splitUnit, int x, int y)
 {
+	if (!splitUnit || splitUnit->army != this)
+	{
+		gameHelpers::logStringGame("armyStruct::splitUnit: the unit is not part of this army.");
+		return;
+	}
 	coordPair targetCoords{x, y};
 	unit* un = splitUnit;
 	DWORD splitArmy = codes::offsets.splitArmy;
@@ -399,6 +402,11 @@ void armyStruct::splitUnit(unit* splitUnit, int x, int y)
 	int unitCount = 1;
 	const auto fac = this->faction;
 	auto tile = stratMapHelpers::getTile(x, y);
+	if (!tile)
+	{
+		gameHelpers::logStringGame("armyStruct::splitUnit: target tile is out of bounds.");
+		return;
+	}
 	if (auto tileChar = tile->getCharacter(); tileChar)
 	{
 		if (tileChar->army && tileChar->army->faction != faction)
@@ -417,7 +425,7 @@ void armyStruct::splitUnit(unit* splitUnit, int x, int y)
 		gameHelpers::logStringGame("armyStruct::splitUnit: can not split army, tile is occupied by enemy fort.");
 		return;
 	}
-	auto stratPathFind = gameHelpers::getGameDataAll()->stratPathFinding; 
+	auto stratPathFind = gameHelpers::getGameDataAll()->stratPathFinding;
 	if (!GAME_FUNC(bool(__thiscall*)(stratPathFinding*, unit**, int, coordPair*), canArmySplit)
 		(stratPathFind, listPtr, unitCount, &targetCoords))
 	{
@@ -570,37 +578,75 @@ void armyStruct::releaseUnits()
 }
 armyStruct* armyStruct::mergeArmies(armyStruct* targetArmy, bool force)
 {
-	if (!targetArmy)
+	if (!targetArmy || targetArmy == this)
 		return nullptr;
 	if (!targetArmy->canReceiveMerge(this))
 		return nullptr;
 	if (force)
 	{
-		armyHelpers::mergeArmies(this, targetArmy);
+		if (!armyHelpers::mergeArmies(this, targetArmy))
+			return nullptr;
+		return targetArmy;
+	}
+	int targetX, targetY;
+	if (targetArmy->gen)
+	{
+		targetX = targetArmy->gen->xCoord;
+		targetY = targetArmy->gen->yCoord;
+	}
+	else if (targetArmy->settlement)
+	{
+		targetX = targetArmy->settlement->xCoord;
+		targetY = targetArmy->settlement->yCoord;
 	}
 	else
-	{
-		int targetX, targetY;
-		if (targetArmy->gen)
-		{
-			targetX = targetArmy->gen->xCoord;
-			targetY = targetArmy->gen->yCoord;
-		}
-		else if (targetArmy->settlement)
-		{
-			targetX = targetArmy->settlement->xCoord;
-			targetY = targetArmy->settlement->yCoord;
-		}
-		else
-			return nullptr;
-		return moveTactical(targetX, targetY);
-	}
-	return nullptr;
+		return nullptr;
+	return moveTactical(targetX, targetY);
 }
 
 armyStruct* armyStruct::mergeArmies(armyStruct* targetArmy)
 {
 	return mergeArmies(targetArmy, true);
+}
+
+void armyStruct::removeCharacter(character* general, const bool fade)
+{
+	GAME_FUNC(void(__thiscall*)(armyStruct*, character*, bool), changeStackCharacterNum)(this, general, fade);
+}
+
+bool armyStruct::transferCharacterToArmy(character* general, armyStruct* otherArmy)
+{
+	if (!general || !otherArmy || otherArmy == this || otherArmy->faction != faction)
+		return false;
+	if (!general->bodyguards || general->bodyguards->army != this)
+		return false;
+	if (!otherArmy->canReceiveUnit(general->bodyguards))
+		return false;
+	bool found = false;
+	for (int i = 0; i < charactersNum; i++)
+	{
+		if (characters[i] == general)
+		{
+			found = true;
+			break;
+		}
+	}
+	if (!found)
+		return false;
+	removeCharacter(general, false);
+	const auto newArmy = GAME_FUNC(armyStruct*(__thiscall*)(character*, unit*), characterCreateArmy)(general, general->bodyguards);
+	if (!newArmy)
+	{
+		gameHelpers::logStringGame("armyStruct.transferCharacterToArmy: could not create an army for the detached character.");
+		return false;
+	}
+	const auto merged = newArmy->mergeArmies(otherArmy, true);
+	if (!merged || !general->bodyguards || general->bodyguards->army != merged)
+	{
+		gameHelpers::logStringGame("armyStruct.transferCharacterToArmy: merge failed, character left leading their own army.");
+		return false;
+	}
+	return true;
 }
 
 namespace armyHelpers
@@ -645,10 +691,10 @@ namespace armyHelpers
         }
     }
 
-	void mergeArmies(armyStruct* army, armyStruct* targetArmy)
+	bool mergeArmies(armyStruct* army, armyStruct* targetArmy)
     {
-    	if (!targetArmy->canReceiveMerge(army))
-    		return;
+    	if (!army || !targetArmy || army == targetArmy || !targetArmy->canReceiveMerge(army))
+    		return false;
     	DWORD codeOffset = codes::offsets.mergeArmies;
     	_asm
 		{
@@ -657,6 +703,7 @@ namespace armyHelpers
 			mov eax, codeOffset
 			call eax
 		}
+    	return true;
     }
 	
 	bool stopSiege(armyStruct* army)
@@ -932,7 +979,6 @@ namespace armyHelpers
 		GAME_FUNC(void(__thiscall*)(fortStruct*, character*), addToFort)(fort, army->gen);
 	}
 #pragma endregion Army Creation
-
 	
 
 	float getMinimumMovePointsForArmy(const armyStruct* army)

@@ -889,9 +889,13 @@ namespace unitActions
     		ability = un->generalInfo->ability;
     	if (!ability && heroOnly)
 			return false;
+    	if (heroOnly && (!un->generalInfo || !un->generalInfo->isAlive))
+    	{
+			return false;
+    	}
     	if (ability)
     	{
-		    if (ability->usesLeft > 0 && ability->abilityTimer > 0)
+		    if (ability->abilityTimer > 0)
 				return false;
     		if (heroOnly && ability->usesLeft == 0)
 				return false;

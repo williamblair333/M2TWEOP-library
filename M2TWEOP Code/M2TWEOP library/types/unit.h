@@ -1051,11 +1051,23 @@ struct heroAbility
 {
 	char *name; //0x0000
 	char pad_0004[4]; //0x0004
-	void* generalStuff; //0x0008
+	generalInfo* generalStuff; //0x0008
 	int32_t usesLeft; //0x000C
 	int32_t cooldown; //0x0010
 	int32_t abilityTimer; //0x0014
 	int32_t duration; //0x0018
+	bool force;
+	bool tagged;
+	bool started;
+	bool finished;
+	UNICODE_STRING** tooltip;
+	UNICODE_STRING** activeTooltip;
+	UNICODE_STRING** disableTooltip;
+	int sprite;
+	int activeSprite;
+	int disableSprite;
+	char* sound;
+	int soundHash;
 };
 
 struct unitMoveStruct

@@ -965,6 +965,7 @@ struct aiOrder
 	std::vector<std::shared_ptr<armySupportResource>> assignedArmies{};
 	std::vector<std::pair<int, int>> validTiles{};
 	void setTiles(int x, int y);
+	int findTileWithRoom(int unitNum) const;
 	void sortArmies();
 	bool playerInvolved = false;
 	bool executed = false;
@@ -1122,7 +1123,14 @@ public:
 	bool isEndTurn = false;
 	void characterTurnStart(character* currentChar, bool turnStart);
 	static eopProductionHelper* getProductionHelper() { return &getInstance()->m_prodHelper; }
+	int getPendingUnits(int x, int y) const;
+	void addPendingUnits(int x, int y, int units);
+	void fixOverfullArmies(factionStruct* fac);
 protected:
+	void fixOverfullArmy(armyStruct* army);
+	static std::vector<character*> getAuxGenerals(const armyStruct* army);
+	bool transferAuxGeneral(armyStruct* army, armyStruct* target, std::vector<character*>& auxGenerals);
+	std::map<std::pair<int, int>, int> m_PendingTileUnits{};
 	static std::shared_ptr<globalEopAiConfig> m_Instance;
 	factionStruct* m_Faction{};
 	std::vector<character*> m_usedCharacters{};

@@ -136,6 +136,8 @@ public:
 		DWORD addUnitToArmyFunc = NULL;
 		DWORD makeBuildingCondition = NULL;
 		DWORD switchFactionLeader = NULL;
+		DWORD characterCreateArmy = NULL;
+		DWORD changeStackCharacterNum = NULL;
 
 		DWORD setBodyguard = NULL;
 

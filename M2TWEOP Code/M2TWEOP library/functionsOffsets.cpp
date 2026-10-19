@@ -454,6 +454,8 @@ void codes::initCodes(int gameVer)
 		offsets.autoResolveHandler = 0x628D60;
 		offsets.recoverSoldier = 0x743930;
 		offsets.onCalcPathFindWidth = 0xE05F80;
+		offsets.characterCreateArmy = 0x595130;
+		offsets.changeStackCharacterNum = 0x70EE80;
 	}
 
 
@@ -911,5 +913,7 @@ void codes::initCodes(int gameVer)
 		offsets.autoResolveHandler = 0x629110;
 		offsets.recoverSoldier = 0x7440B0;
 		offsets.onCalcPathFindWidth = 0xE005B0;
+		offsets.characterCreateArmy = 0x595630;
+		offsets.changeStackCharacterNum = 0x70F560;
 	}
 }
