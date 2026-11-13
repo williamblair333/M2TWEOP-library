@@ -2815,6 +2815,13 @@ void __fastcall patchesForGame::onEvent(DWORD** vTab, DWORD arg2)
 	}
 	else if (eventCode == preFactionTurnStartCode)
 	{
+		// The minor settlement cache holds raw settlementStruct pointers, filled at load and when a
+		// settlement is made. One the game frees later (sacked, razed, replaced) stayed in it, and the
+		// AI directors' next getSettlement read freed memory (Parley campaign, 2026-11-13: an access
+		// violation in minorSettlementDb::getSettlement from aiCampaignController::isDefensive at a
+		// faction turn start). Drop it every faction turn; the next lookup rebuilds it from the live
+		// region and faction lists (one pass over the regions).
+		minorSettlementDb::clear();
 		factionStruct* fac = reinterpret_cast<factionStruct*>(vTab[1]);
 		const auto campaign = campaignHelpers::getCampaignData();
 		//This fixes some bugs with using the control console command, like winning battles if you quit them.
@@ -2986,10 +2993,8 @@ void __fastcall patchesForGame::onEvent(DWORD** vTab, DWORD arg2)
 		minHookFunctions::resetMercScrollCache();
 		const auto campData = campaignHelpers::getCampaignData();
 		campData->ignoreSpeedUp = false;
-		if (campData->type == 3)
-		{
-			minorSettlementDb::clear();
-		}
+		// any battle can take or sack a settlement, not only in campaign type 3: rebuild on next use
+		minorSettlementDb::clear();
 	}
 	else if (eventCode == preBattleWithdrawal || eventCode == generalAssaultsResidence)
 	{
