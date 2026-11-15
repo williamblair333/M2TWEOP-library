@@ -304,7 +304,7 @@ struct uiElement {
      undefined field_0x20[32];
      int xPos;
      int yPos;
-     undefined field_0x48[4];
+     struct uiElement* parent;
      struct uiElement** subElements;
      undefined field_0x50[4];
      int subElementsNum;
@@ -363,6 +363,7 @@ namespace gameUiHelpers
 	bool useButton(const char* buttonName);
 	void checkNeedRemoveTooltips();
 	uiElement* getUiElement(const char* elementName);
+	sol::table getOpenUiElements();
 	void useUiElement(uiElement* element);
 	unitInfoScroll* getUnitInfoScroll();
 	buildingInfoScroll* getBuildingInfoScroll();
