@@ -913,6 +913,7 @@ namespace factionHelpers
 		DWORD splitArmy = codes::offsets.splitArmy;
 		auto coordsPtr = &targetCoords;
 		auto listPtr = &unitList[0];
+		const int unitsBefore = stack->numOfUnits;
 		_asm
 		{
 			push coordsPtr
@@ -921,6 +922,14 @@ namespace factionHelpers
 			mov ecx, faction
 			mov eax, splitArmy
 			call eax
+		}
+		// The game's split does nothing for a target it won't take (one more than a tile away;
+		// Parley run 9: splits 11 and 18 tiles off), and the units are still in the old army. Say so
+		// and return nil, rather than the old army as if a new one had been made.
+		if (unitCount < unitsBefore && unitList[0]->army == stack)
+		{
+			gameHelpers::logStringGame("factionStruct.splitArmy: the game did not split the army (target not next to it?).");
+			return nullptr;
 		}
 		return unitList[0]->army;
 	}
