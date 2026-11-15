@@ -1,4 +1,4 @@
-///
+﻿///
 //@module LuaPlugin
 //@author youneuoy
 //@license GPL-3.0
@@ -529,10 +529,12 @@ sol::state* luaPlugin::init(std::string& luaFilePath, std::string& modPath)
 	The bill/M2TWEOP-library fork's fix level: nil on any other build. Each level includes the ones
 	below it. 1: ImGui text as "%s" (#2), tile.isLandConnection/isSeaCrossing (#3),
 	getBuildingInQueue 1-based (#4), splitArmy nil on no split (#5), gameSTDUI.getOpenUiElements (#6).
+	2: uiElementStruct:getSubElement and elementName check every pointer before reading it (a stale
+	child is nil, a stale name ""), so a window's parts can be walked at any depth.
 	A script that relies on one of these checks the level instead of guessing from the API's shape.
 	@tfield int forkLevel
 	*/
-	tables.M2TWEOP.set("forkLevel", 1);
+	tables.M2TWEOP.set("forkLevel", 2);
 
 	/***
 	Set perfect spy.
