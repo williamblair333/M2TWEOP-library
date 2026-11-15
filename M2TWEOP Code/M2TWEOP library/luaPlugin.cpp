@@ -531,10 +531,12 @@ sol::state* luaPlugin::init(std::string& luaFilePath, std::string& modPath)
 	getBuildingInQueue 1-based (#4), splitArmy nil on no split (#5), gameSTDUI.getOpenUiElements (#6).
 	2: uiElementStruct:getSubElement and elementName check every pointer before reading it (a stale
 	child is nil, a stale name ""), so a window's parts can be walked at any depth.
+	3: gameSTDUI.getOpenUiElements also lists open message scrolls (offers, event messages), which hang
+	from their message icon, not from strat_ui.
 	A script that relies on one of these checks the level instead of guessing from the API's shape.
 	@tfield int forkLevel
 	*/
-	tables.M2TWEOP.set("forkLevel", 2);
+	tables.M2TWEOP.set("forkLevel", 3);
 
 	/***
 	Set perfect spy.

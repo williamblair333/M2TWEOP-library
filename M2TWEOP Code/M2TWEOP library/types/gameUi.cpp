@@ -130,6 +130,23 @@ namespace gameUiHelpers
 				continue;
 			res.add(window);
 		}
+		// A message scroll (a marriage offer, a suitor, any event message opened from its icon) hangs
+		// from its message icon at the screen's edge, a root of its own (parent nullptr), not from
+		// strat_ui, and the icon doesn't list it among its children (Parley 11-15: a suitor offer,
+		// 512x593, under a 47x47 icon). So a window is also any element on the list whose parent is a
+		// root other than strat_ui.
+		if (arr->count > arr->capacity || !isReadable(arr->list, arr->count * sizeof(uiElement*)))
+			return res;
+		for (int i = 1; i < arr->count; i++)
+		{
+			uiElement* e = arr->list[i];
+			if (!isReadable(e, uiElementReadSize))
+				continue;
+			const uiElement* parent = e->parent;
+			if (!parent || parent == root || !isReadable(parent, uiElementReadSize) || parent->parent)
+				continue;
+			res.add(e);
+		}
 		return res;
 	}
 	
@@ -283,7 +300,7 @@ namespace gameUiHelpers
 		tables.gameUITable.set_function("getUiElement", &getUiElement);
 
 		/***
-		Get the windows on screen now (scrolls and panels hung under strat_ui, bar the campaign HUD).
+		Get the windows on screen now: scrolls and panels hung under strat_ui (bar the campaign HUD), and open message scrolls (offers, event messages) hung from their message icon.
 		@function gameSTDUI.getOpenUiElements
 		@treturn table elements
 		@usage
