@@ -491,12 +491,12 @@ namespace sol_ImGui
 	// Widgets: Text
 	void TextUnformatted(const std::string& text) { ImGui::TextUnformatted(text.c_str()); }
 	void TextUnformatted(const std::string& text, const std::string& textEnd) { ImGui::TextUnformatted(text.c_str(), textEnd.c_str()); }
-	void Text(const std::string& text) { ImGui::Text(text.c_str()); }
-	void TextColored(float colR, float colG, float colB, float colA, const std::string& text) { ImGui::TextColored({ colR, colG, colB, colA }, text.c_str()); }
-	void TextDisabled(const std::string& text) { ImGui::TextDisabled(text.c_str()); }
-	void TextWrapped(const std::string& text) { ImGui::TextWrapped(text.c_str()); }
-	void LabelText(const std::string& label, const std::string& text) { ImGui::LabelText(label.c_str(), text.c_str()); }
-	void BulletText(const std::string& text) { ImGui::BulletText(text.c_str()); }
+	void Text(const std::string& text) { ImGui::Text("%s", text.c_str()); }
+	void TextColored(float colR, float colG, float colB, float colA, const std::string& text) { ImGui::TextColored({ colR, colG, colB, colA }, "%s", text.c_str()); }
+	void TextDisabled(const std::string& text) { ImGui::TextDisabled("%s", text.c_str()); }
+	void TextWrapped(const std::string& text) { ImGui::TextWrapped("%s", text.c_str()); }
+	void LabelText(const std::string& label, const std::string& text) { ImGui::LabelText(label.c_str(), "%s", text.c_str()); }
+	void BulletText(const std::string& text) { ImGui::BulletText("%s", text.c_str()); }
 	void SeparatorText(const std::string& text) { ImGui::SeparatorText(text.c_str()); }
 
 	// Widgets: Main
@@ -1773,7 +1773,7 @@ namespace sol_ImGui
 	// Tooltips
 	bool BeginTooltip() { return ImGui::BeginTooltip(); }
 	void EndTooltip() { ImGui::EndTooltip(); }
-	void SetTooltip(const std::string& fmt) { ImGui::SetTooltip(fmt.c_str()); }
+	void SetTooltip(const std::string& fmt) { ImGui::SetTooltip("%s", fmt.c_str()); }
 	void SetTooltipV() { /* TODO: SetTooltipV(...) ==> UNSUPPORTED */ }
 
 	// Tooltips: helpers for showing a tooltip when hovering an item
@@ -1893,7 +1893,7 @@ namespace sol_ImGui
 	void LogToClipboard(int auto_open_depth) { ImGui::LogToClipboard(auto_open_depth); }
 	void LogFinish() { ImGui::LogFinish(); }
 	void LogButtons() { ImGui::LogButtons(); }
-	void LogText(const std::string& fmt) { ImGui::LogText(fmt.c_str()); }
+	void LogText(const std::string& fmt) { ImGui::LogText("%s", fmt.c_str()); }
 
 	// Drag and Drop
 	// TODO: Drag and Drop ==> UNSUPPORTED
