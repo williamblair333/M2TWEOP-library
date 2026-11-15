@@ -55,9 +55,12 @@ namespace gameUiHelpers
 		return readableBytes(p, n) == n;
 	}
 
+	// the part of a uiElement read here: name, position, parent, children and their count
+	static constexpr size_t uiElementReadSize = offsetof(uiElement, subElementsNum) + sizeof(int);
+
 	std::string getUIElementName(const uiElement* element)
 	{
-		if (!isReadable(element, sizeof(uiElement)) || !element->elementName)
+		if (!isReadable(element, uiElementReadSize) || !element->elementName)
 			return std::string("");
 		const size_t avail = readableBytes(element->elementName, 256);
 		if (avail == 0)
@@ -68,13 +71,13 @@ namespace gameUiHelpers
 	// nullptr for an index out of range or a child whose memory can't be read (never a bad pointer)
 	uiElement* getSubElement(const uiElement* element, const int index)
 	{
-		if (!isReadable(element, sizeof(uiElement)) || index < 0 || index >= element->subElementsNum
+		if (!isReadable(element, uiElementReadSize) || index < 0 || index >= element->subElementsNum
 			|| element->subElementsNum > 1000)
 			return nullptr;
 		if (!isReadable(element->subElements + index, sizeof(uiElement*)))
 			return nullptr;
 		uiElement* child = element->subElements[index];
-		return isReadable(child, sizeof(uiElement)) ? child : nullptr;
+		return isReadable(child, uiElementReadSize) ? child : nullptr;
 	}
 
 	bool useButton(const char* buttonName)
