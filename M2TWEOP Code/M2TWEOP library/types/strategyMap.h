@@ -723,6 +723,16 @@ public:
 	{
 		return seaCrossing;
 	}
+	// 3.3.1 read these bits of the field separately: bit 0 a land connection (green arrows),
+	// bit 2 a sea crossing (close proximity). hasSeaCrossing above is true for either.
+	bool isLandConnectionBit()
+	{
+		return (seaCrossing & 1) != 0;
+	}
+	bool isSeaCrossingBit()
+	{
+		return (seaCrossing & 4) != 0;
+	}
 	bool isRoad()
 	{
 		return roadLevel;

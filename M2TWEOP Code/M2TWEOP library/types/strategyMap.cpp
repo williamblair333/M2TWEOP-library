@@ -1646,6 +1646,8 @@ namespace stratMapHelpers
 		@tfield bool hasCrossing
 		@tfield bool hasVolcano 
 		@tfield bool hasSeaCrossing
+		@tfield bool isLandConnection Crossing created by green arrows (as in 3.3.1).
+		@tfield bool isSeaCrossing Crossing created by close proximity, not green arrows (as in 3.3.1).
 		@tfield bool hasRoad
 		@tfield int roadLevel
 		@tfield int earthquakeLevel
@@ -1700,6 +1702,8 @@ namespace stratMapHelpers
 		typeAll.tileStruct.set("hasCrossing", sol::property(&oneTile::isCrossing));
 		typeAll.tileStruct.set("hasVolcano", sol::property(&oneTile::isVolcano));
 		typeAll.tileStruct.set("hasSeaCrossing", sol::property(&oneTile::isSeaCrossing));
+		typeAll.tileStruct.set("isLandConnection", sol::property(&oneTile::isLandConnectionBit));
+		typeAll.tileStruct.set("isSeaCrossing", sol::property(&oneTile::isSeaCrossingBit));
 		typeAll.tileStruct.set("hasRoad", sol::property(&oneTile::isRoad));
 		typeAll.tileStruct.set("roadLevel", sol::property(&oneTile::getRoadLevel));
 		typeAll.tileStruct.set("earthquakeLevel", sol::property(&oneTile::getEarthQuake));
