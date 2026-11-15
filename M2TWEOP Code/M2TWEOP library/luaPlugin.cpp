@@ -8,6 +8,7 @@
 #include "settlementConversionLvlSetter.h"
 #include "stratModelsChange.h"
 #include "gameHelpers.h"
+#include "../../M2TWEOP Common/m2tweopConstData.h"
 #include "character.h"
 #include "settlement.h"
 #include "characterRecord.h"
@@ -517,7 +518,22 @@ sol::state* luaPlugin::init(std::string& luaFilePath, std::string& modPath)
 	M2TWEOP.getGameVersion();
 	*/
 	tables.M2TWEOP.set_function("getGameVersion", &gameHelpers::getGameVersion);
-	
+
+	/***
+	This library's version name, e.g. "M2TWEOP-4.0.0".
+	@tfield string eopVersion
+	*/
+	tables.M2TWEOP.set("eopVersion", std::string(eopConstData::eopVersionName));
+
+	/***
+	The bill/M2TWEOP-library fork's fix level: nil on any other build. Each level includes the ones
+	below it. 1: ImGui text as "%s" (#2), tile.isLandConnection/isSeaCrossing (#3),
+	getBuildingInQueue 1-based (#4), splitArmy nil on no split (#5), gameSTDUI.getOpenUiElements (#6).
+	A script that relies on one of these checks the level instead of guessing from the API's shape.
+	@tfield int forkLevel
+	*/
+	tables.M2TWEOP.set("forkLevel", 1);
+
 	/***
 	Set perfect spy.
 	@function M2TWEOP.setPerfectSpy
