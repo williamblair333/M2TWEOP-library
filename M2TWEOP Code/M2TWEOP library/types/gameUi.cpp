@@ -33,18 +33,51 @@ namespace gameUiHelpers
 		return gameHelpers::getGameDataAll()->uiCardManager;
 	}
 
-	std::string getUIElementName(const uiElement* element)
+	// Bytes readable at p, up to n (0 if p is not committed, readable memory). A closed window's
+	// parts stay on the game's lists with stale pointers: a sub-element named "null" under
+	// siege_scroll pointed at freed memory and reading it crashed the game (Parley, 11-12).
+	static size_t readableBytes(const void* p, const size_t n)
 	{
-		if (element->elementName)
-			return std::string(element->elementName);
-		return std::string("");
+		if (!p)
+			return 0;
+		MEMORY_BASIC_INFORMATION m{};
+		if (VirtualQuery(p, &m, sizeof(m)) == 0 || m.State != MEM_COMMIT)
+			return 0;
+		if ((m.Protect & 0xff) == PAGE_NOACCESS || (m.Protect & PAGE_GUARD))
+			return 0;
+		const auto end = reinterpret_cast<uintptr_t>(m.BaseAddress) + m.RegionSize;
+		const auto avail = end - reinterpret_cast<uintptr_t>(p);
+		return avail < n ? avail : n;
 	}
 
+	static bool isReadable(const void* p, const size_t n)
+	{
+		return readableBytes(p, n) == n;
+	}
+
+	// the part of a uiElement read here: name, position, parent, children and their count
+	static constexpr size_t uiElementReadSize = offsetof(uiElement, subElementsNum) + sizeof(int);
+
+	std::string getUIElementName(const uiElement* element)
+	{
+		if (!isReadable(element, uiElementReadSize) || !element->elementName)
+			return std::string("");
+		const size_t avail = readableBytes(element->elementName, 256);
+		if (avail == 0)
+			return std::string("");
+		return std::string(element->elementName, strnlen(element->elementName, avail));
+	}
+
+	// nullptr for an index out of range or a child whose memory can't be read (never a bad pointer)
 	uiElement* getSubElement(const uiElement* element, const int index)
 	{
-		if (element->subElementsNum > index)
-			return element->subElements[index];
-		return nullptr;
+		if (!isReadable(element, uiElementReadSize) || index < 0 || index >= element->subElementsNum
+			|| element->subElementsNum > 1000)
+			return nullptr;
+		if (!isReadable(element->subElements + index, sizeof(uiElement*)))
+			return nullptr;
+		uiElement* child = element->subElements[index];
+		return isReadable(child, uiElementReadSize) ? child : nullptr;
 	}
 
 	bool useButton(const char* buttonName)
@@ -77,10 +110,11 @@ namespace gameUiHelpers
 			uint16_t count;
 		};
 		const auto arr = reinterpret_cast<const uiElementListStruct*>(codes::offsets.uiElementList);
-		if (!arr || !arr->list || arr->count == 0)
+		if (!isReadable(arr, sizeof(uiElementListStruct)) || arr->count == 0
+			|| !isReadable(arr->list, sizeof(uiElement*)))
 			return res;
 		const uiElement* root = arr->list[0];
-		if (!root || !root->elementName || strcmp(root->elementName, "strat_ui") != 0)
+		if (!root || getUIElementName(root) != "strat_ui")
 			return res;
 		// A shown window hangs under strat_ui (finance_scroll's parent is strat_ui while it is up);
 		// a closed one keeps its parts on the list but is cut loose (parent nullptr). So the windows
@@ -89,10 +123,10 @@ namespace gameUiHelpers
 			return res;
 		for (int i = 0; i < root->subElementsNum; i++)
 		{
-			uiElement* window = root->subElements[i];
+			uiElement* window = getSubElement(root, i);
 			if (!window)
 				continue;
-			if (window->elementName && strcmp(window->elementName, "campaign_hud") == 0)
+			if (getUIElementName(window) == "campaign_hud")
 				continue;
 			res.add(window);
 		}
