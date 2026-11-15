@@ -176,6 +176,7 @@ public:
 
 		DWORD useButtonFunc = NULL;
 		DWORD getUiElementFunc = NULL;
+		DWORD uiElementList = NULL;
 
 		DWORD getSkeleton = NULL;
 		DWORD createModelFlexi = NULL;

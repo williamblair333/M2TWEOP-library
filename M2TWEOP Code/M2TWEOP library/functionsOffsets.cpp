@@ -121,6 +121,7 @@ void codes::initCodes(int gameVer)
 
 		offsets.useButtonFunc = 0x00b0daf0;
 		offsets.getUiElementFunc = 0x00b4bff0;
+		offsets.uiElementList = 0; // steam: 0x02c2bc2c
 
 		offsets.getSkeleton = 0x007403B0;
 		offsets.createModelFlexi = 0x0093AB40;
@@ -585,6 +586,7 @@ void codes::initCodes(int gameVer)
 
 		offsets.useButtonFunc = 0x00b07e00;
 		offsets.getUiElementFunc = 0x00b46340;
+		offsets.uiElementList = 0x02c2bc2c;
 
 		offsets.getSkeleton = 0x0740B40;
 		offsets.createModelFlexi = 0x0093B610;

@@ -15,6 +15,7 @@
 #include "character.h"
 #include "dataOffsets.h"
 #include "unit.h"
+#include "luaPlugin.h"
 
 namespace gameUiHelpers
 {
@@ -62,6 +63,40 @@ namespace gameUiHelpers
 		gameStringHelpers::freeHashString(hashedName);
 
 		return resElement;
+	}
+
+	sol::table getOpenUiElements()
+	{
+		sol::table res = plugData::data.luaAll.luaState.create_table();
+		if (!codes::offsets.uiElementList)
+			return res;
+		struct uiElementListStruct
+		{
+			uiElement** list;
+			uint16_t capacity;
+			uint16_t count;
+		};
+		const auto arr = reinterpret_cast<const uiElementListStruct*>(codes::offsets.uiElementList);
+		if (!arr || !arr->list || arr->count == 0)
+			return res;
+		const uiElement* root = arr->list[0];
+		if (!root || !root->elementName || strcmp(root->elementName, "strat_ui") != 0)
+			return res;
+		// A shown window hangs under strat_ui (finance_scroll's parent is strat_ui while it is up);
+		// a closed one keeps its parts on the list but is cut loose (parent nullptr). So the windows
+		// on screen are strat_ui's children, bar the campaign HUD itself.
+		if (!root->subElements || root->subElementsNum < 1 || root->subElementsNum > 200)
+			return res;
+		for (int i = 0; i < root->subElementsNum; i++)
+		{
+			uiElement* window = root->subElements[i];
+			if (!window)
+				continue;
+			if (window->elementName && strcmp(window->elementName, "campaign_hud") == 0)
+				continue;
+			res.add(window);
+		}
+		return res;
 	}
 	
 	void useUiElement(uiElement* element)
@@ -188,6 +223,7 @@ namespace gameUiHelpers
 		Basic gameSTDUI table
 
 		@tfield getUiElement getUiElement
+		@tfield getOpenUiElements getOpenUiElements
 
 		@table gameSTDUI
 		*/
@@ -211,6 +247,19 @@ namespace gameUiHelpers
 		*/
 
 		tables.gameUITable.set_function("getUiElement", &getUiElement);
+
+		/***
+		Get the windows on screen now (scrolls and panels hung under strat_ui, bar the campaign HUD).
+		@function gameSTDUI.getOpenUiElements
+		@treturn table elements
+		@usage
+		local openElements = gameSTDUI.getOpenUiElements()
+		for i = 1, #openElements do
+			print(openElements[i].elementName)
+		end
+		*/
+
+		tables.gameUITable.set_function("getOpenUiElements", &getOpenUiElements);
 
 		/// UIElement
 		//@section uiElementStructTable
