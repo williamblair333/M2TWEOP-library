@@ -179,6 +179,23 @@ namespace gameUiHelpers
 		return res;
 	}
 
+	std::string readUiElementBytes(const uiElement* element, const int offset, const int count)
+	{
+		if (!element || offset < 0 || count <= 0 || count > 1024)
+			return std::string("");
+		const auto start = reinterpret_cast<const uint8_t*>(element) + offset;
+		const size_t n = readableBytes(start, static_cast<size_t>(count));
+		static const char digits[] = "0123456789abcdef";
+		std::string hex;
+		hex.reserve(n * 2);
+		for (size_t i = 0; i < n; i++)
+		{
+			hex += digits[start[i] >> 4];
+			hex += digits[start[i] & 0xf];
+		}
+		return hex;
+	}
+
 	void useUiElement(uiElement* element)
 	{
 		GAME_FUNC(void(__thiscall*)(uiElement*), useButtonFunc)(element);
@@ -398,6 +415,16 @@ namespace gameUiHelpers
 		subElement1:execute();
 		*/
 		types.uiElement.set("execute", &useUiElement);
+		/***
+		The element's own bytes as hex, for working out what its fields mean (a live message icon against a cleared one, a button against a panel). Only memory that can be read is read; the result is shorter where it stops.
+		@function uiElementStruct:readBytes
+		@tparam int offset From the element's start, 0 or more.
+		@tparam int count At most 1024.
+		@treturn string hex Two characters a byte, "" when nothing can be read.
+		@usage
+		print(gameSTDUI.getRootUiElements()[1]:readBytes(0, 256))
+		*/
+		types.uiElement.set("readBytes", &readUiElementBytes);
 		
 		/***
 		Basic settlementTextStrings table.
