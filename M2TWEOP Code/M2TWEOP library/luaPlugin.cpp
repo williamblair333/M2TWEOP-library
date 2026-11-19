@@ -533,10 +533,12 @@ sol::state* luaPlugin::init(std::string& luaFilePath, std::string& modPath)
 	child is nil, a stale name ""), so a window's parts can be walked at any depth.
 	3: gameSTDUI.getOpenUiElements also lists open message scrolls (offers, event messages), which hang
 	from their message icon, not from strat_ui.
+	4: gameSTDUI.getRootUiElements lists the root elements (no parent), the minimized-message icons among
+	them, each pointer checked before it is read.
 	A script that relies on one of these checks the level instead of guessing from the API's shape.
 	@tfield int forkLevel
 	*/
-	tables.M2TWEOP.set("forkLevel", 3);
+	tables.M2TWEOP.set("forkLevel", 4);
 
 	/***
 	Set perfect spy.
