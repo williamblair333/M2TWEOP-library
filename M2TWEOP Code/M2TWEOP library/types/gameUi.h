@@ -364,6 +364,7 @@ namespace gameUiHelpers
 	void checkNeedRemoveTooltips();
 	uiElement* getUiElement(const char* elementName);
 	sol::table getOpenUiElements();
+	sol::table getRootUiElements();
 	void useUiElement(uiElement* element);
 	unitInfoScroll* getUnitInfoScroll();
 	buildingInfoScroll* getBuildingInfoScroll();

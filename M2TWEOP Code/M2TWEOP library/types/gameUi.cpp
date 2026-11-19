@@ -149,7 +149,36 @@ namespace gameUiHelpers
 		}
 		return res;
 	}
-	
+
+	sol::table getRootUiElements()
+	{
+		// Every root on the element list bar strat_ui (parent nullptr): the minimized-message icons
+		// at the screen's left edge (47x47, Parley 11-15), which getOpenUiElements leaves out, and the
+		// parts of closed windows, which are cut loose the same way. Every read is checked first: a
+		// raw walk of this list from Lua (LuaJIT ffi, Parley 11-19) crashed the game on a freed entry.
+		sol::table res = plugData::data.luaAll.luaState.create_table();
+		if (!codes::offsets.uiElementList)
+			return res;
+		struct uiElementListStruct
+		{
+			uiElement** list;
+			uint16_t capacity;
+			uint16_t count;
+		};
+		const auto arr = reinterpret_cast<const uiElementListStruct*>(codes::offsets.uiElementList);
+		if (!isReadable(arr, sizeof(uiElementListStruct)) || arr->count == 0 || arr->count > arr->capacity
+			|| !isReadable(arr->list, arr->count * sizeof(uiElement*)))
+			return res;
+		for (int i = 1; i < arr->count; i++)
+		{
+			uiElement* e = arr->list[i];
+			if (!isReadable(e, uiElementReadSize) || e->parent)
+				continue;
+			res.add(e);
+		}
+		return res;
+	}
+
 	void useUiElement(uiElement* element)
 	{
 		GAME_FUNC(void(__thiscall*)(uiElement*), useButtonFunc)(element);
@@ -311,6 +340,18 @@ namespace gameUiHelpers
 		*/
 
 		tables.gameUITable.set_function("getOpenUiElements", &getOpenUiElements);
+
+		/***
+		Get every root UI element bar strat_ui (no parent): the minimized-message icons at the screen's left edge, and the parts of closed windows. Every pointer is checked before it is read.
+		@function gameSTDUI.getRootUiElements
+		@treturn table elements
+		@usage
+		for _, e in ipairs(gameSTDUI.getRootUiElements()) do
+			if e.xSize < 64 and e.xPos < 64 then print("message icon at", e.xPos, e.yPos) end
+		end
+		*/
+
+		tables.gameUITable.set_function("getRootUiElements", &getRootUiElements);
 
 		/// UIElement
 		//@section uiElementStructTable
