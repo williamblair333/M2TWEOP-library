@@ -201,6 +201,26 @@ namespace gameUiHelpers
 		GAME_FUNC(void(__thiscall*)(uiElement*), useButtonFunc)(element);
 	}
 
+	// UI::UI_ELEMENT's virtual slot 60 (vtable + 0xF0) is "use this element": bool __thiscall(), no
+	// arguments. Every UI_ELEMENT vtable has at least 90 slots. For UI::UI_BUTTON the slot is
+	// useButtonFunc itself; a minimized message icon (UI::UI_MESSAGE_ICON) overrides it to open its
+	// message. Calling useButtonFunc on an icon jumps through button-only slot 98, past the icon's
+	// 98-slot vtable, and crashes the game (Parley, 11-19 and 11-20).
+	bool activateUiElement(uiElement* element)
+	{
+		constexpr size_t useSlot = 60;
+		if (!isReadable(element, sizeof(void*)))
+			return false;
+		const auto vtable = *reinterpret_cast<void* const* const*>(element);
+		if (!isReadable(vtable + useSlot, sizeof(void*)))
+			return false;
+		using useFunc = bool(__thiscall*)(uiElement*);
+		const auto use = reinterpret_cast<useFunc>(vtable[useSlot]);
+		if (!use)
+			return false;
+		return use(element);
+	}
+
 	stratUIStruct* getStratUi()
 	{
 		const auto uiPtr = reinterpret_cast<stratUIStruct**>(dataOffsets::offsets.uiStratUiV2);
@@ -415,6 +435,16 @@ namespace gameUiHelpers
 		subElement1:execute();
 		*/
 		types.uiElement.set("execute", &useUiElement);
+		/***
+		Use the element the way the game does when it is clicked: its own virtual "use" function, so a button presses and a minimized message icon opens its message. Unlike execute, it is safe on elements that are not buttons.
+		@function uiElementStruct:activate
+		@treturn bool what the element's use function returned (false if the element can't be read)
+		@usage
+		for _, e in ipairs(gameSTDUI.getRootUiElements()) do
+			if e.xSize == 47 and e.ySize == 47 then e:activate() break end
+		end
+		*/
+		types.uiElement.set("activate", &activateUiElement);
 		/***
 		The element's own bytes as hex, for working out what its fields mean (a live message icon against a cleared one, a button against a panel). Only memory that can be read is read; the result is shorter where it stops.
 		@function uiElementStruct:readBytes

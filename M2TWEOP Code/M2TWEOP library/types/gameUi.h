@@ -367,6 +367,7 @@ namespace gameUiHelpers
 	sol::table getRootUiElements();
 	std::string readUiElementBytes(const uiElement* element, int offset, int count);
 	void useUiElement(uiElement* element);
+	bool activateUiElement(uiElement* element);
 	unitInfoScroll* getUnitInfoScroll();
 	buildingInfoScroll* getBuildingInfoScroll();
 	stratUIStruct* getStratUi();

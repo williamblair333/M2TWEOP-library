@@ -537,10 +537,12 @@ sol::state* luaPlugin::init(std::string& luaFilePath, std::string& modPath)
 	them, each pointer checked before it is read.
 	5: uiElementStruct:readBytes(offset, count), an element's bytes as hex, reading only memory that can
 	be read (to tell a live message icon from a cleared one, which look alike).
+	6: uiElementStruct:activate(), the element's own virtual use function (slot 60), so a minimized message
+	icon opens its message; execute() only suits buttons.
 	A script that relies on one of these checks the level instead of guessing from the API's shape.
 	@tfield int forkLevel
 	*/
-	tables.M2TWEOP.set("forkLevel", 5);
+	tables.M2TWEOP.set("forkLevel", 6);
 
 	/***
 	Set perfect spy.
